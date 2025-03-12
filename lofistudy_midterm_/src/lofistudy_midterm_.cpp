@@ -55,6 +55,7 @@ int lastSecond;
 
 bool buttonPress;
 float t;
+bool studyMode;
 bool breakMode;
 
 #define LOGO16_GLCD_HEIGHT 16
@@ -69,7 +70,11 @@ void pixelFill(int startP, int endP, int hex);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 const int WEMO1 = 1;
 const int WEMO2 = 2;
+const int BULB = 1;
+const int BULB = 2;
 const int BULB = 3;
+const int BULB = 4;
+const int BULB = 5;
 
 SYSTEM_THREAD(ENABLED);
 
@@ -92,10 +97,10 @@ void setup()
   waitFor(Serial.isConnected, 15000);
   Serial.printf("I2c Snanner \n");
 
-  // MYWEMO && HUE SETUP //
-  // WiFi.on();
-  // WiFi.clearCredentials();
-  // WiFi.setCredentials("IoTNetwork");
+  //MYWEMO && HUE SETUP //
+  WiFi.on();
+  WiFi.clearCredentials();
+  WiFi.setCredentials("IoTNetwork");
 
   while (WiFi.connecting())
   {
@@ -133,60 +138,69 @@ void loop()
   currentTime = millis();
   digitalWrite(REDLED, HIGH);
 
-  // BME INPUT READINGS
-  humidRH = bme.readHumidity();
-  tempC = bme.readTemperature();
-  pressPA = bme.readPressure();
-  tempF = tempC * (9.0 / 5.0) + 32.0;
-  pressureHg = pressPA / 3386.39;
-
-  // TURNING ON WEMO1(HUMIDIFIER) && WEMO2 (STUDY LIGHT)
-  Serial.printf("Turning on Wemo# %i\n Wemo on Wemo %i\n", WEMO1, WEMO2);
-  wemoWrite(WEMO1, HIGH);
-  wemoWrite(WEMO2, HIGH);
-
-  // STUDY MODE HUE LIGHTS (PURPLE)
-  Serial.printf("Setting color of bulb %i to color %06i\n", BULB, HueRainbow[6]);
-  setHue(BULB, true, HueRainbow[6], 255, 255);
-
-  // PIXELFILL PURPLE FOR STUDY MODE //
-  if (breakTimer.isTimerReady())
+  // STUDY MODE //
+  if (studyMode)
   {
-    pixelFill(0, 69, purple);
-  }
-  // BME PRINT TO MONITOR
-  // if ((currentTime - lastSecond) > 500)
-  // {
-  //   lastSecond = millis();
-  //   Serial.printf("Humidity =%f\n", humidRH);
-  //   Serial.printf("TempF: %f F\n", tempF);
-  //   Serial.printf("pressPA =%f inHg\n", pressPA);
-  // }
+    breakTimer.startTimer(250000);
+    lastSecond = millis();
+    studyMode = true;
 
-  // BME READINGS PRINT TO OLED
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
-  display.setTextColor(BLACK, WHITE);
-  display.display();
-  display.clearDisplay();
+    // BME INPUT READINGS
+    humidRH = bme.readHumidity();
+    tempC = bme.readTemperature();
+    pressPA = bme.readPressure();
+    tempF = tempC * (9.0 / 5.0) + 32.0;
+    pressureHg = pressPA / 3386.39;
+
+    // TURNING ON WEMO1(HUMIDIFIER) && WEMO2 (STUDY LIGHT)
+    Serial.printf("Turning on Wemo# %i\n Wemo on Wemo %i\n", WEMO1, WEMO2);
+    wemoWrite(WEMO1, HIGH);
+    wemoWrite(WEMO2, HIGH);
+
+    // STUDY MODE HUE LIGHTS (PURPLE)
+    Serial.printf("Setting color of bulb %i to color %06i\n", BULB, HueRainbow[6]);
+    setHue(BULB, true, HueRainbow[6], 255, 255);
+
+    // PIXELFILL PURPLE FOR STUDY MODE //
+    if (breakTimer.isTimerReady())
+    {
+      pixelFill(0, 46, purple);
+    }
+
+    // BME PRINT TO MONITOR
+    if ((currentTime - lastSecond) > 500)
+    {
+      lastSecond = millis();
+      Serial.printf("Humidity =%f\n", humidRH);
+      Serial.printf("TempF: %f F\n", tempF);
+      Serial.printf("pressPA =%f inHg\n", pressPA);
+    }
+
+    // BME READINGS PRINT TO OLED
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(0, 0);
+    display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
+    display.setTextColor(BLACK, WHITE);
+    display.display();
+    display.clearDisplay();
+  }
 
   // TIME GREATER THAN 2.5 MINUTES DO THIS
-  if ((currentTime - lastSecond) > 150000)
+  if ((currentTime - lastSecond) > 250000)
   {
     lastSecond = millis();
     breakMode = true;
 
-    /// ENTERING BREAK MODE AFTER 2.5 MINUTES///
+    /// ENTERING BREAK MODE//
     /// BREAKMODE IS 15 SECONDS ///
     /// TURN WEMO1(HUMIDIFER) INTO MANUAL READING FOR BREAK
   }
-  // TURN NEO PIXELS ORANGE FOR BREAKTIME///
+  // TURN NEO PIXELS ORANGE FOR BREAKMODE///
   if (breakMode)
   {
     breakTimer.startTimer(31000);
-        pixelFill(0, 69, orange);
+    pixelFill(0, 46, orange);
     if (humidRH < 31.0)
     { // turn on humidifier
       Serial.printf("Turning on Wemo# %i\n", WEMO1);
@@ -202,122 +216,118 @@ void loop()
     Serial.printf("Turning off Wemo%i\n", WEMO2);
     wemoWrite(WEMO2, LOW);
   }
-
-  // MANUAL MODE //
-  if (button1.isClicked())
-  {
-    buttonPress = !buttonPress;
-    Serial.printf("%i Button Click", button1);
-  }
-
-  if (buttonPress)
-  {
-    pixel.clear();
-
-    // ENCODER LOOP //
-
-    // ENCODER MIN-MAX //
-
-    switchState = encoder.read();
-    if (switchState > 1)
-    { // DISCOVER MODE (WHITELED) //
-      digitalWrite(REDLED, HIGH);
-      digitalWrite(GREENLED, HIGH);
-      digitalWrite(BLUELED, HIGH);
-      setHue(3, true, HueYellow, 255, 255);
-      pixelFill(0, 46, WHITE);
-    }
-
-    // AWAY MODE (BLUELED) //
-    if (switchState < 1)
-    {
-      digitalWrite(BLUELED, HIGH);
-      digitalWrite(REDLED, LOW);
-      digitalWrite(GREENLED, LOW);
-      pixelFill(0, PIXELCOUNT, blue);
-    }
-    // DISPLAY READINGS TO OLED //
-    // BME READINGS PRINT TO OLED
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0, 0);
-    display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
-    display.setTextColor(BLACK, WHITE);
-    display.display();
-    display.clearDisplay();
-  }
-
-  else
-  {
-    currentTime = millis();
-    digitalWrite(REDLED, HIGH);
-    // TURNING ON WEMO1(HUMIDIFIER) && WEMO2 (STUDY LIGHT)
-    Serial.printf("Turning on Wemo# %i\n Wemo on Wemo %i\n", WEMO1, WEMO2);
-    wemoWrite(WEMO1, HIGH);
-    wemoWrite(WEMO2, HIGH);
-
-    // STUDY MODE HUE LIGHTS (PURPLE)
-    Serial.printf("Setting color of bulb %i to color %06i\n", BULB, HueRainbow[6]);
-    setHue(BULB, true, HueRainbow[6], 255, 255);
-
-    // PIXELFILL PURPLE FOR STUDY MODE //
-    
-    // BME PRINT TO MONITOR
-    // if ((currentTime - lastSecond) > 500)
-    // {
-    //   lastSecond = millis();
-    //   Serial.printf("Humidity =%f\n", humidRH);
-    //   Serial.printf("TempF: %f F\n", tempF);
-    //   Serial.printf("pressPA =%f inHg\n", pressPA);
-    // }
-
-    // BME READINGS PRINT TO OLED
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0, 0);
-    display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
-    display.setTextColor(BLACK, WHITE);
-    display.display();
-    display.clearDisplay();
-
-    // TIME GREATER THAN 2.5 MINUTES DO THIS
-    // if ((currentTime - lastSecond) > 150000)
-    // {
-    //   lastSecond = millis();
-    //   breakMode = true;
-    //   breakTimer.startTimer(31000);
-    //   /// ENTERING BREAK MODE AFTER 2.5 MINUTES///
-    //   /// BREAKMODE IS 15 SECONDS ///
-    //   /// TURN WEMO1(HUMIDIFER) INTO MANUAL READING FOR BREAK
-    // }
-    // TURN NEO PIXELS ORANGE FOR BREAKTIME///
-    if (breakMode)
-    {
-      pixelFill(0, 69, orange);
-      if (humidRH < 31.0)
-      { // turn on humidifier
-        Serial.printf("Turning on Wemo# %i\n", WEMO1);
-        wemoWrite(WEMO1, HIGH);
-      }
-
-      if (humidRH >= 31.0)
-      { // turn off humidifer
-        Serial.printf("Turning off Wemo#%i\n", WEMO1);
-        wemoWrite(WEMO1, LOW);
-      }
-      /// TURN WEMO2 (STUDY LIGHT) OFF FOR BREAKTIME
-      Serial.printf("Turning off Wemo%i\n", WEMO2);
-      wemoWrite(WEMO2, LOW);
-    }
-  }
-
-  // SET HUMIDIFIER TO AUTO READ //
-  if (humidRH < 31.0)
-  { // turn on humidifier
-    Serial.printf("Turning on Wemo# %i\n", WEMO1);
-    wemoWrite(WEMO1, HIGH);
-  }
 }
+  // MANUAL MODE //
+  // if (button1.isClicked())
+  // {
+  //   buttonPress = !buttonPress;
+  //   Serial.printf("%i Button Click", button1);
+  // }
+
+  // if (buttonPress)
+  // {
+  //   pixel.clear();
+
+  //   // ENCODER LOOP //
+
+  //   // ENCODER MIN-MAX //
+
+  //   switchState = encoder.read();
+  //   if (switchState > 1)
+  //   { // DISCOVER MODE (WHITELED) //
+  //     digitalWrite(REDLED, HIGH);
+  //     digitalWrite(GREENLED, HIGH);
+  //     digitalWrite(BLUELED, HIGH);
+  //     setHue(3, true, HueYellow, 255, 255);
+  //     pixelFill(0, 46, WHITE);
+  //   }
+
+  //   // AWAY MODE (BLUELED) //
+  //   if (switchState < 1)
+  //   {
+  //     digitalWrite(BLUELED, HIGH);
+  //     digitalWrite(REDLED, LOW);
+  //     digitalWrite(GREENLED, LOW);
+  //     pixelFill(0, PIXELCOUNT, blue);
+  //   }
+    // DISPLAY READINGS TO OLED //
+    // // BME READINGS PRINT TO OLED
+    // display.setTextSize(1);
+    // display.setTextColor(WHITE);
+    // display.setCursor(0, 0);
+    // display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
+    // display.setTextColor(BLACK, WHITE);
+    // display.display();
+    // display.clearDisplay();
+
+    //   // PIXELFILL PURPLE FOR STUDY MODE //
+    //   currentTime = millis();
+    //   digitalWrite(REDLED, HIGH);
+
+    //   // TURNING ON WEMO1(HUMIDIFIER) && WEMO2 (STUDY LIGHT)
+    //   Serial.printf("Turning on Wemo# %i\n Wemo on Wemo %i\n", WEMO1, WEMO2);
+    //   wemoWrite(WEMO1, HIGH);
+    //   wemoWrite(WEMO2, HIGH);
+
+    //   // STUDY MODE HUE LIGHTS (PURPLE)
+    //   Serial.printf("Setting color of bulb %i to color %06i\n", BULB, HueRainbow[6]);
+    //   setHue(BULB, true, HueRainbow[6], 255, 255);
+
+  // BME PRINT TO MONITOR
+  // if ((currentTime - lastSecond) > 500)
+  // {
+  //   lastSecond = millis();
+  //   Serial.printf("Humidity =%f\n", humidRH);
+  //   Serial.printf("TempF: %f F\n", tempF);
+  //   Serial.printf("pressPA =%f inHg\n", pressPA);
+  // }
+
+  // BME READINGS PRINT TO OLED
+//   display.setTextSize(1);
+//   display.setTextColor(WHITE);
+//   display.setCursor(0, 0);
+//   display.printf("T:%0.0f%c  H:%0.0f%c", tempF, degree, pressureHg, cent);
+//   display.setTextColor(BLACK, WHITE);
+//   display.display();
+//   display.clearDisplay();
+
+//   //TIME GREATER THAN 2.5 MINUTES DO THIS
+//   if ((currentTime - lastSecond) > 150000)
+//   {
+//     lastSecond = millis();
+//     breakMode = true;
+//     breakTimer.startTimer(31000);
+//     /// ENTERING BREAK MODE AFTER 2.5 MINUTES///
+//     /// BREAKMODE IS 15 SECONDS ///
+//     /// TURN WEMO1(HUMIDIFER) INTO MANUAL READING FOR BREAK
+//   }
+//   TURN NEO PIXELS ORANGE FOR BREAKTIME///
+//   if (breakMode)
+//   {
+//     pixelFill(0, 69, orange)
+//     if (humidRH < 31.0)
+//     { // turn on humidifier
+//       Serial.printf("Turning on Wemo# %i\n", WEMO1);
+//       wemoWrite(WEMO1, HIGH);
+//     }
+
+//     if (humidRH >= 31.0)
+//     { // turn off humidifer
+//       Serial.printf("Turning off Wemo#%i\n", WEMO1);
+//       wemoWrite(WEMO1, LOW)
+    
+//     /// TURN WEMO2 (STUDY LIGHT) OFF FOR BREAKTIME
+//     Serial.printf("Turning off Wemo%i\n", WEMO2)
+//     wemoWrite(WEMO2, LOW)
+  
+
+//   // SET HUMIDIFIER TO AUTO READ //
+//   if (humidRH < 31.0)
+//   { // turn on humidifier
+//     Serial.printf("Turning on Wemo# %i\n", WEMO1);
+//     wemoWrite(WEMO1, HIGH);
+//   }
+// }
 
 // DECLARING THE PIXELFILL FUNCTION //
 void pixelFill(int startP, int endP, int hex)
